@@ -213,5 +213,8 @@ if st.session_state.chat_history:
     b64 = base64.b64encode(chat_text.encode()).decode()
     href = f'<a href="data:file/txt;base64,{b64}" download="chat_history.txt">📥 Download Chat History</a>'
     st.markdown(href, unsafe_allow_html=True)
- st.markdown("⚖️Disclaimer: This is a demo tool. For official guidance, refer to MSU policies. It offers AI-powered answers based on MSU-specific rules, NSPM-33, and quick links to forms and training. 
-Designed to support under-resourced teams by streamlining award workflows and boosting compliance—without accessing sensitive data.")
+ 
+st.markdown("⚖️Disclaimer: This is a demo tool. For official guidance, refer to MSU policies. It offers AI-powered answers based on MSU-specific rules, NSPM-33, and quick links to forms and training. 
+Designed to support under-resourced teams by streamlining award workflows and boosting compliance—without accessing sensitive data."
+)
+
