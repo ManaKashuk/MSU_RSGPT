@@ -13,6 +13,9 @@ except AttributeError:
 # ...later in your code, use:
 # rerun()
 
+SUPPORT_EMAIL = "ask.ora@morgan.edu"
+CONTACT_NOTE = f"If you still need help, email <a href='mailto:{SUPPORT_EMAIL}'>{SUPPORT_EMAIL}</a>."
+
 # ---------- Helper: Convert Logo to Base64 ----------
 def get_image_base64(img):
     buffer = BytesIO()
@@ -176,15 +179,16 @@ if st.button("Submit") and question.strip():
             top_matches = get_close_matches(question, all_q_global, n=3, cutoff=0.4)
             if top_matches:
                 guessed_category = df[df["Question"] == top_matches[0]].iloc[0]["Category"]
-                response_text = f"I couldn't find an exact match, but your question seems related to <b>{guessed_category}</b>.<br><br>"
-                response_text += "Here are some similar questions:<br>"
-                for i, q in enumerate(top_matches, start=1):
-                    response_text += f"{i}. {q}<br>"
-                response_text += "<br>Select one below to see its answer."
+                response_text = (f"I couldn't find an exact match, but your question seems related to <b>{guessed_category}</b>.<br><br>" 
+                 "Here are some similar questions:<br>"
+                 + "".join(f"{i}. {q}<br>" for i, q in enumerate(top_matches, start=1))
+                 + "<br>Select one below to see its answer.<br><br>"
+                 + CONTACT_NOTE
+               )
                 st.session_state.chat_history.append({"role": "assistant", "content": response_text})
                 st.session_state.suggested_list = top_matches
             else:
-                st.session_state.chat_history.append({"role": "assistant", "content": "I couldn't find a close match. Please try rephrasing."})
+                st.session_state.chat_history.append({     "role": "assistant",     "content": "I couldn't find a close match. Please try rephrasing.<br><br>" + CONTACT_NOTE })
 
     st.rerun()
 
