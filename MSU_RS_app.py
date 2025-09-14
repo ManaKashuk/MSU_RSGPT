@@ -163,8 +163,3 @@ if st.session_state.suggested_list:
             st.session_state.chat_history.append({"role":"assistant","content":html,"cites":[]})
     # clear list only after rendering buttons (so they persist if not clicked)
 
-# ---------- Debug panel (helps diagnose blank screens) ----------
-with st.expander("🔧 Debug info (hide before demo)"):
-    st.write({"csv_path": CSV_PATH, "csv_exists": os.path.exists(CSV_PATH), "rows": len(DF)})
-    if csv_error: st.error(f"CSV load error: {csv_error}")
-    st.write("Session keys:", list(st.session_state.keys()))
