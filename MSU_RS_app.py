@@ -1,27 +1,3 @@
-"""
-MSU Research Security Smart Assistant (Streamlit + RAG)
-------------------------------------------------------
-Poster demo build inspired by RBLPgpt at Rice Biotech LaunchPad.
-
-Features (single-file scaffold):
-- Domain-restricted RAG over public MSU Research Security pages (+ agency guidance)
-- Five modes: Ask, Find a Form/Policy, Pre-/Post-Award Checklists, Training Tracker (demo), TCP Helper
-- Citations with URLs and last-crawled time
-- Lightweight local vector store (Chroma or FAISS) with on-demand ingestion
-
-How to run (dev):
-1) `pip install -r requirements.txt` (see bottom of file for a starter list)
-2) Save this file as `app.py`
-3) Optional: put downloaded PDFs/HTML in `./data/msu/`
-4) `streamlit run app.py`
-
-Security/Privacy (demo posture):
-- Only crawls/reads public *.morgan.edu and US.gov policy pages
-- No uploads, no PII/PHI, no grant docs
-- Telemetry limited to query class + source slugs (if you choose)
-
-Note: Replace any LLM/Embedding model with your institution-approved stack.
-"""
 
 import os
 import re
@@ -370,18 +346,3 @@ def main():
 
     ui_footer()
 
-
-if __name__ == "__main__":
-    main()
-
-# -----------------------
-# requirements.txt (starter)
-# -----------------------
-# streamlit>=1.36.0
-# langchain>=0.2.0
-# langchain-community>=0.2.0
-# chromadb>=0.5.0    # or faiss-cpu>=1.7.4
-# sentence-transformers>=2.5.1
-# pypdf>=4.0.0
-# beautifulsoup4>=4.12.3
-# requests>=2.32.3
