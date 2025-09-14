@@ -38,7 +38,7 @@ except Exception:
 st.markdown(
     f"""
     <div style='text-align:left;'>
-        <img src='data:image/png;base64,{logo_base64}' width='100'/>
+        <img src='data:image/png;base64,{logo_base64}' width='200'/>
         <h2>MSU Research Security Assistant</h2>
         <h5><i>Smart Assistant for Pre- & Post-Award Support at Morgan State University</i></h5>
         <p>🛡️ Trained on MSU Research Security topics and federal guidance (demo).</p>
