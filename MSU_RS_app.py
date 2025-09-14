@@ -6,9 +6,6 @@ from io import BytesIO
 from datetime import datetime
 import streamlit as st
 
-pip install -r requirements.txt
-streamlit run app.py
-
 # -----------------------
 # Page setup & minimal styling (no sidebar)
 # -----------------------
