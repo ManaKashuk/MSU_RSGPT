@@ -345,4 +345,8 @@ def main():
         mode_tcp()
 
     ui_footer()
+    
+    if __name__ == "__main__":
+    main()
+
 
