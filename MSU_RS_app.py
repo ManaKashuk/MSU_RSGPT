@@ -4,6 +4,14 @@ from difflib import SequenceMatcher, get_close_matches
 from PIL import Image
 import base64
 from io import BytesIO
+# Streamlit rerun shim (works on old & new versions)
+try:
+    rerun = st.rerun           # Streamlit ≥ 1.27-ish
+except AttributeError:
+    rerun = st.experimental_rerun  # older versions
+
+# ...later in your code, use:
+# rerun()
 
 # ---------- Helper: Convert Logo to Base64 ----------
 def get_image_base64(img):
