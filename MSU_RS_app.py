@@ -1,163 +1,122 @@
-"""
-MSU Research Security Smart Assistant — Clean UI (no sidebar)
-Poster demo styled like your Rice RBLPgpt.
-"""
-
-import os, re, json, hashlib
-from dataclasses import dataclass
+import os, re, base64
+import pandas as pd
+from difflib import SequenceMatcher, get_close_matches
+from PIL import Image
+from io import BytesIO
 from datetime import datetime
-from typing import List, Tuple, Dict
 import streamlit as st
 
 # -----------------------
-# Minimal demo data layer (kept from your stub)
+# Page setup & minimal styling (no sidebar)
 # -----------------------
-MSU_ROOT = "https://www.morgan.edu/office-of-research-administration/research-compliance/research-security"
-ALLOWED_DOMAINS = ["morgan.edu", "whitehouse.gov", "ostp.gov", "dni.gov", "nsf.gov"]
-DEFAULT_SEED_URLS = [MSU_ROOT, "https://www.whitehouse.gov/ostp/", "https://www.dni.gov/", "https://new.nsf.gov/"]
-
-@dataclass
-class DocChunk:
-    content: str
-    source: str
-    title: str
-    crawled_at: str
-
-INMEMORY_CHUNKS: List[DocChunk] = []
-
-def domain_allowed(url: str) -> bool:
-    return any(d in url for d in ALLOWED_DOMAINS)
-
-def sanitize_text(t: str) -> str:
-    return re.sub(r"\s+", " ", t).strip()
-
-def ts_now_iso() -> str:
-    return datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
-
-def ingest_sources(seed_urls: List[str]) -> int:
-    created, now = 0, ts_now_iso()
-    for url in seed_urls:
-        if not domain_allowed(url): 
-            continue
-        txt = f"This is a placeholder summary for {url}. Replace with real crawl/loader content. " \
-              f"Cites MSU Research Security or federal guidance as available."
-        INMEMORY_CHUNKS.append(DocChunk(txt, url, url, now))
-        created += 1
-    return created
-
-def retrieve(query: str, k: int = 5) -> List[DocChunk]:
-    if not INMEMORY_CHUNKS:
-        ingest_sources(DEFAULT_SEED_URLS)
-    q = query.lower()
-    scored = []
-    for ch in INMEMORY_CHUNKS:
-        score = sum(ch.content.lower().count(tok) for tok in q.split())
-        scored.append((score, ch))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [c for s, c in scored[:k]]
-
-def synthesize_answer(query: str, chunks: List[DocChunk]) -> Tuple[str, List[Tuple[str, str]]]:
-    header = ("**Assistant (demo):**\n"
-              "I found guidance related to your question below. This demo uses stubbed text; "
-              "wire it to your approved LLM and embeddings for production.\n\n")
-    bullets, cites = [], []
-    for ch in chunks:
-        bullets.append(f"- From **{ch.title}** (crawled {ch.crawled_at}): _{sanitize_text(ch.content[:180])}…_")
-        cites.append((ch.title, ch.source))
-    body = "\n".join(bullets) if bullets else "- No matching sources yet."
-    return header + body + "\n\n", cites
+st.set_page_config(page_title="MSU Research Security Assistant", page_icon="🦉", layout="centered")
+st.markdown(
+    """
+    <style>
+    #MainMenu, header, footer {visibility: hidden;}
+    section[data-testid="stSidebar"] {display:none !important;}
+    .block-container {max-width: 900px; padding-top: 0.5rem;}
+    .hero {text-align:center; margin: 0.5rem 0 0.75rem;}
+    .hero .logo {width:72px; opacity:0.95;}
+    .hero h1 {margin: 0.25rem 0; font-size: 2.0rem;}
+    .hero .subtitle {color:#4b5563; margin: 0 0 0.2rem;}
+    .hero .trained {color:#6b7280; font-size:0.95rem;}
+    .chips button {margin-right: 0.5rem; margin-bottom: 0.5rem;}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 # -----------------------
-# UI (no sidebar, centered)
+# Logo helpers
 # -----------------------
-def hero_header():
+def _img_to_b64(img: Image.Image) -> str:
+    buf = BytesIO(); img.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+def load_logo_b64(path: str) -> str:
+    try:
+        return _img_to_b64(Image.open(path))
+    except Exception:
+        return ""
+
+LOGO_B64 = load_logo_b64("logo.png")  # put your logo.png next to app.py
+
+def show_answer_with_logo(html_answer: str):
     st.markdown(
-        """
-        <div class="hero">
-            <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/68/Morgan_State_University_seal.svg/512px-Morgan_State_University_seal.svg.png" class="logo" />
-            <h1>MSU Research Security Assistant</h1>
-            <p class="subtitle">Smart Assistant for Pre- &amp; Post-Award Support at Morgan State University</p>
-            <p class="trained">Trained on public MSU Research Security pages and federal guidance (demo).</p>
+        f"""
+        <div style='display:flex;align-items:flex-start;margin:10px 0;'>
+            <img src='data:image/png;base64,{LOGO_B64}' width='40' style='margin-right:10px;border-radius:8px;'/>
+            <div style='background:#f6f6f6;padding:12px;border-radius:12px;max-width:75%;'>
+                {html_answer}
+            </div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-def render_sources(cites: List[Tuple[str, str]]):
-    if not cites: 
-        return
-    st.markdown("### Sources")
-    for title, url in cites:
-        st.markdown(f"- [{title}]({url})")
+# -----------------------
+# Hero header
+# -----------------------
+st.markdown(
+    f"""
+    <div class='hero'>
+        <img src='data:image/png;base64,{LOGO_B64}' class='logo' />
+        <h1>MSU Research Security Assistant</h1>
+        <p class='subtitle'>Smart Assistant for Pre- &amp; Post-Award Support at Morgan State University</p>
+        <p class='trained'>Trained on MSU Research Security topics and federal guidance (demo).</p>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
-def main():
-    st.set_page_config(page_title="MSU Research Security Assistant", page_icon="🦉", layout="centered")
+# -----------------------
+# CSV knowledge base
+# -----------------------
+CSV_PATH = "msu_faq.csv"
+try:
+    DF = pd.read_csv(CSV_PATH).fillna("")
+except Exception as e:
+    st.error(f"Could not read {CSV_PATH}: {e}")
+    DF = pd.DataFrame(columns=["Category","Question","Answer"])
 
-    # Hide Streamlit chrome + sidebar, add simple style
-    st.markdown(
-        """
-        <style>
-        #MainMenu, header, footer {visibility: hidden;}
-        section[data-testid="stSidebar"] {display:none !important;}
-        .block-container {max-width: 900px; padding-top: 0.5rem;}
-        .hero {text-align:center; margin: 0.5rem 0 0.75rem;}
-        .hero .logo {width:72px; opacity:0.95;}
-        .hero h1 {margin: 0.25rem 0; font-size: 2.0rem;}
-        .hero .subtitle {color:#4b5563; margin: 0 0 0.2rem;}
-        .hero .trained {color:#6b7280; font-size:0.95rem;}
-        .chips button {margin-right: 0.5rem; margin-bottom: 0.5rem;}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+# Session state
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+if "suggested_list" not in st.session_state:
+    st.session_state.suggested_list = []
+if "last_category" not in st.session_state:
+    st.session_state.last_category = ""
 
-    if "bootstrapped" not in st.session_state:
-        ingest_sources(DEFAULT_SEED_URLS)
-        st.session_state.bootstrapped = True
+# -----------------------
+# Fusion helpers (CSV first, then RAG stub)
+# -----------------------
+def best_csv_match(question: str, df: pd.DataFrame):
+    best_q, best_score = "", 0.0
+    for q in df["Question"].tolist():
+        sc = SequenceMatcher(None, question.lower(), q.lower()).ratio()
+        if sc > best_score:
+            best_q, best_score = q, sc
+    return best_q, best_score
 
-    hero_header()
+def retrieve_stub(query: str, k: int = 5):
+    # placeholder “retrieval” — swap with your real RAG later
+    demo = [
+        {
+            "title": "MSU Research Security (public page)",
+            "url": "https://www.morgan.edu/office-of-research-administration/research-compliance/research-security",
+            "snippet": "Research Security supports disclosures, training, and risk management aligned to NSPM-33."
+        },
+        {
+            "title": "NSPM-33 (overview)",
+            "url": "https://www.whitehouse.gov/ostp/",
+            "snippet": "Federal standard for research security: disclosure, training, cybersecurity, and risk management."
+        }
+    ][:k]
+    return demo
 
-    # Upload (visual only in demo)
-    st.markdown("### Upload a file for reference (optional)")
-    st.file_uploader("Drag and drop file here (PDF, DOCX, TXT)", type=["pdf", "docx", "txt"], label_visibility="collapsed")
-
-    # Category (visual filter only in demo)
-    st.markdown("### Select a category:")
-    category = st.selectbox("Select a category", ["All Categories", "Research Security", "Training", "TCP", "Disclosures"], label_visibility="collapsed")
-
-    # Prompt input
-    st.markdown("### Start typing your question…")
-    if "prompt" not in st.session_state:
-        st.session_state.prompt = ""
-    prompt = st.text_input("Start typing your question…", value=st.session_state.prompt, label_visibility="collapsed")
-
-    # Suggested prompts (chips)
-    st.markdown("### Try asking one of these:")
-    suggestions = [
-        "What internal documents are needed before submitting a Cayuse proposal at MSU?",
-        "How do I route for Chair/Dean approval?",
-        "What does NSPM-33 require for disclosures?",
-    ]
-    c1, c2, c3 = st.columns(3)
-    if c1.button(suggestions[0]): st.session_state.prompt = suggestions[0]; st.experimental_rerun()
-    if c2.button(suggestions[1]): st.session_state.prompt = suggestions[1]; st.experimental_rerun()
-    if c3.button(suggestions[2]): st.session_state.prompt = suggestions[2]; st.experimental_rerun()
-
-    # Search button (aligned to right like a CTA)
-    col_q, col_btn = st.columns([0.8, 0.2])
-    with col_q:
-        q = st.session_state.prompt if st.session_state.prompt else prompt
-    with col_btn:
-        do_search = st.button("Search", use_container_width=True)
-
-    if do_search and (q or prompt):
-        chunks = retrieve(q or prompt, k=5)
-        md, cites = synthesize_answer(q or prompt, chunks)
-        st.markdown("---")
-        st.markdown(md)
-        render_sources(cites)
-
-    st.caption("Disclaimer: Demo only; refer to official MSU policy for authoritative guidance.")
-
-if __name__ == "__main__":
-    main()
+def fuse_answer(question: str, category: str):
+    # Category filter
+    df = DF
+    if category and category != "All Categories" and not DF.empty:
+        df = DF[DF["Category"].str.strip().str.lower() == category.strip().lower()]
