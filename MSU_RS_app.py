@@ -1,165 +1,203 @@
-import base64, os
+import streamlit as st
 import pandas as pd
 from difflib import SequenceMatcher, get_close_matches
 from PIL import Image
+import base64
 from io import BytesIO
-import streamlit as st
 
-# ---------- Page + minimal CSS ----------
-st.set_page_config(page_title="MSU Research Security Assistant", page_icon="🦉", layout="centered")
-st.markdown("""
-<style>
-#MainMenu, header, footer {visibility: hidden;}
-section[data-testid="stSidebar"] {display:none !important;}
-.block-container {max-width: 900px; padding-top: .5rem;}
-.hero {text-align:center; margin: .5rem 0 .75rem;}
-.hero .logo {width:72px; opacity:.95;}
-.hero h1 {margin:.25rem 0; font-size:2rem;}
-.hero .subtitle {color:#4b5563; margin:0 0 .2rem;}
-.hero .trained {color:#6b7280; font-size:.95rem;}
-.answer {background:#f6f6f6; padding:12px; border-radius:12px; max-width:75%;}
-.user {text-align:right; margin:10px 0;}
-.user > div {display:inline-block; background:#e6f7ff; padding:12px; border-radius:12px; max-width:70%;}
-</style>
-""", unsafe_allow_html=True)
+# ---------- Helper: Convert Logo to Base64 ----------
+def get_image_base64(img):
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()
 
-# ---------- Logo helpers ----------
-def _img_to_b64(img: Image.Image) -> str:
-    buf = BytesIO(); img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode()
-
-def load_logo_b64(path: str) -> str:
-    try:
-        return _img_to_b64(Image.open(path))
-    except Exception:
-        return ""
-
-LOGO_B64 = load_logo_b64("logo.png")  # ensure this file is beside app.py
-
-def show_answer_with_logo(html_answer: str):
+# ---------- Helper: Show Answer with Logo ----------
+def show_answer_with_logo(answer_html):
     st.markdown(
         f"""
         <div style='display:flex;align-items:flex-start;margin:10px 0;'>
-            <img src='data:image/png;base64,{LOGO_B64}' width='40' style='margin-right:10px;border-radius:8px;'/>
-            <div class='answer'>{html_answer}</div>
+            <img src='data:image/png;base64,{logo_base64}' width='40' style='margin-right:10px;border-radius:8px;'/>
+            <div style='background:#f6f6f6;padding:12px;border-radius:12px;max-width:75%;'>
+                {answer_html}
+            </div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-# ---------- Hero ----------
+# ---------- Config & Logo ----------
+st.set_page_config(page_title="MSU Research Security Assistant", layout="centered")
+
+try:
+    # Place your MSU logo file beside this script as: logo.png
+    logo = Image.open("logo.png")
+    logo_base64 = get_image_base64(logo)
+except Exception:
+    logo_base64 = ""
+
 st.markdown(
     f"""
-    <div class='hero'>
-        <img src='data:image/png;base64,{LOGO_B64}' class='logo' />
-        <h1>MSU Research Security Assistant</h1>
-        <p class='subtitle'>Smart Assistant for Pre- &amp; Post-Award Support at Morgan State University</p>
-        <p class='trained'>Trained on MSU Research Security topics and federal guidance (demo).</p>
+    <div style='text-align:left;'>
+        <img src='data:image/png;base64,{logo_base64}' width='100'/>
+        <h2>MSU Research Security Assistant</h2>
+        <h5><i>Smart Assistant for Pre- & Post-Award Support at Morgan State University</i></h5>
+        <p>🛡️ Trained on MSU Research Security topics and federal guidance (demo).</p>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-# ---------- Load CSV (never crash) ----------
-CSV_PATH = "msu_faq.csv"
-csv_error = None
-try:
-    DF = pd.read_csv(CSV_PATH).fillna("")
-except Exception as e:
-    DF = pd.DataFrame(columns=["Category","Question","Answer"])
-    csv_error = str(e)
+# ---------- File Upload (optional, visual only) ----------
+uploaded_file = st.file_uploader("📎 Upload a file for reference (optional)", type=["pdf", "docx", "txt"])
+if uploaded_file:
+    st.success(f"Uploaded file: {uploaded_file.name}")
 
-# ---------- Session ----------
+# ---------- Load CSV ----------
+# Put a file named msu_faq.csv next to this script with columns: Category,Question,Answer
+try:
+    df = pd.read_csv("msu_faq.csv").fillna("")
+except Exception as e:
+    st.error("Could not read 'msu_faq.csv'. Make sure it exists and has columns: Category, Question, Answer.")
+    df = pd.DataFrame(columns=["Category","Question","Answer"])
+
+# ---------- Session State ----------
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 if "suggested_list" not in st.session_state:
     st.session_state.suggested_list = []
+if "last_category" not in st.session_state:
+    st.session_state.last_category = ""
+if "clear_input" not in st.session_state:
+    st.session_state.clear_input = False
 
-# ---------- Fusion helpers ----------
-def best_csv_match(question: str, df: pd.DataFrame):
-    best_q, best_score = "", 0.0
-    for q in df["Question"].tolist():
-        sc = SequenceMatcher(None, question.lower(), q.lower()).ratio()
-        if sc > best_score:
-            best_q, best_score = q, sc
-    return best_q, best_score
+# ---------- Category Selection ----------
+categories = ["All Categories"] + (sorted(df["Category"].unique()) if not df.empty else [])
+category = st.selectbox("📂 Select a category:", categories)
 
-def retrieve_stub(query: str, k: int = 3):
-    return [
-        {"title":"MSU Research Security (public page)","url":"https://www.morgan.edu/office-of-research-administration/research-compliance/research-security","snippet":"Research Security supports disclosures, training, and risk management aligned to NSPM-33."},
-        {"title":"NSPM-33 (overview)","url":"https://www.whitehouse.gov/ostp/","snippet":"Federal standard for research security: disclosures, training, cybersecurity, risk management."},
-    ][:k]
+# Reset session if category changes
+if st.session_state.last_category != category:
+    st.session_state.chat_history = []
+    st.session_state.suggested_list = []
+    st.session_state.last_category = category
+    st.experimental_rerun()
 
-def fuse_answer(question: str, category: str):
-    df = DF
-    if category and category != "All Categories" and not DF.empty:
-        df = DF[DF["Category"].str.strip().str.lower() == category.strip().lower()]
-        if df.empty: df = DF
+selected_df = df if (df.empty or category == "All Categories") else df[df["Category"] == category]
 
-    if not df.empty:
-        best_q, score = best_csv_match(question, df)
-        if score >= 0.85:
-            row = df[df["Question"] == best_q].iloc[0]
-            return f"<b>Answer:</b> {row['Answer']}<br><i>(Category: {row['Category']})</i>", []
+# ---------- Chat Input ----------
+question = st.text_input("💬 Start typing your question...", value="" if st.session_state.clear_input else "")
+st.session_state.clear_input = False
 
-        if 0.60 <= score < 0.85:
-            top3 = get_close_matches(question, df['Question'].tolist(), n=3, cutoff=0.4)
-            if top3:
-                guessed_cat = df[df['Question'] == top3[0]].iloc[0]['Category']
-                html = f"I couldn't find an exact match, but your question seems related to <b>{guessed_cat}</b>.<br><br>"
-                html += "Here are some similar questions:<br>" + "<br>".join([f"{i+1}. {q}" for i, q in enumerate(top3)])
-                html += "<br><br>Select one below to see its answer."
-                st.session_state.suggested_list = top3
-                return html, []
-
-    hits = retrieve_stub(question, k=3)
-    bullets = "<br>".join([f"- <i>{h['title']}</i>: {h['snippet']}" for h in hits])
-    cites = [(h["title"], h["url"]) for h in hits]
-    return f"<b>Summary (from public sources, demo):</b><br>{bullets}", cites
-
-# ---------- Controls (ALWAYS render) ----------
-categories = ["All Categories"]
-if not DF.empty:
-    categories += sorted([c for c in DF["Category"].unique() if str(c).strip()])
-
-st.markdown("### 📂 Select a category:")
-category = st.selectbox("Category", categories, index=0, label_visibility="collapsed")
-
-question = st.text_input("💬 Start typing your question...", value="")
-
-# Example buttons (if CSV present)
-if not question.strip() and not DF.empty:
+# ---------- Show Example Questions as Buttons ----------
+if not question.strip() and not selected_df.empty:
     st.markdown("💬 Try asking one of these:")
-    for i, q in enumerate(DF["Question"].head(3)):
+    for i, q in enumerate(selected_df["Question"].head(3)):
         if st.button(q, key=f"example_{i}"):
-            st.session_state.chat_history.append({"role":"user","content":q})
-            html, cites = fuse_answer(q, category)
-            st.session_state.chat_history.append({"role":"assistant","content":html,"cites":cites})
+            st.session_state.chat_history.append({"role": "user", "content": q})
+            ans = selected_df[selected_df["Question"] == q].iloc[0]["Answer"]
+            st.session_state.chat_history.append({"role": "assistant", "content": f"<b>Answer:</b> {ans}"})
+            st.session_state.clear_input = True
+            st.rerun()
 
-# Submit
-if st.button("Submit") and question.strip():
-    st.session_state.chat_history.append({"role":"user","content":question})
-    html, cites = fuse_answer(question, category)
-    st.session_state.chat_history.append({"role":"assistant","content":html,"cites":cites})
-
-# Chat render
-st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+# ---------- Display Chat ----------
+st.markdown("<div style='margin-top:20px;'>", unsafe_allow_html=True)
 for msg in st.session_state.chat_history:
     if msg["role"] == "user":
-        st.markdown(f"<div class='user'><div><b>You:</b> {msg['content']}</div></div>", unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <div style='text-align:right;margin:10px 0;'>
+                <div style='display:inline-block;background:#e6f7ff;padding:12px;border-radius:12px;max-width:70%;'>
+                    <b>You:</b> {msg['content']}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
     else:
         show_answer_with_logo(msg["content"])
-        for title, url in msg.get("cites", []):
-            st.markdown(f"- [{title}]({url})")
+st.markdown("</div>", unsafe_allow_html=True)
 
-# Suggestion buttons after a soft match
+# ---------- Autocomplete Suggestions ----------
+if question.strip() and not selected_df.empty:
+    suggestions = [q for q in selected_df["Question"].tolist() if question.lower() in q.lower()][:5]
+    if suggestions:
+        st.markdown("<div style='margin-top:5px;'><b>Suggestions:</b></div>", unsafe_allow_html=True)
+        for s in suggestions:
+            if st.button(s, key=f"suggest_{s}"):
+                st.session_state.chat_history.append({"role": "user", "content": s})
+                ans = selected_df[selected_df["Question"] == s].iloc[0]["Answer"]
+                st.session_state.chat_history.append({"role": "assistant", "content": f"<b>Answer:</b> {ans}"})
+                st.session_state.clear_input = True
+                st.rerun()
+
+# ---------- Submit Question ----------
+if st.button("Submit") and question.strip():
+    st.session_state.chat_history.append({"role": "user", "content": question})
+
+    previous_suggestions = st.session_state.suggested_list
+    st.session_state.suggested_list = []
+    st.session_state.clear_input = True  # Clear input after submit
+
+    # Check for exact or close match
+    all_questions = selected_df["Question"].tolist() if not selected_df.empty else []
+    best_match = None
+    best_score = 0
+    for q in all_questions:
+        score = SequenceMatcher(None, question.lower(), q.lower()).ratio()
+        if score > best_score:
+            best_match = q
+            best_score = score
+
+    if best_match and best_score >= 0.85:  # Only answer if confidence is high
+        row = selected_df[selected_df["Question"] == best_match].iloc[0]
+        ans = row["Answer"]
+        category_note = row["Category"]
+        response_text = f"<b>Answer:</b> {ans}<br><i>(Note: This question belongs to the '{category_note}' category.)</i>"
+        st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+    else:
+        if previous_suggestions:
+            # User ignored suggestions previously → show best prior global match
+            match_q = previous_suggestions[0]
+            row = df[df["Question"] == match_q].iloc[0]
+            ans = row["Answer"]
+            category_note = row["Category"]
+            response_text = f"<b>Answer:</b> {ans}<br><i>(Note: This question belongs to the '{category_note}' category.)</i>"
+            st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+        else:
+            # Suggest top 3 questions instead of giving a wrong answer
+            all_q_global = df["Question"].tolist() if not df.empty else []
+            top_matches = get_close_matches(question, all_q_global, n=3, cutoff=0.4)
+            if top_matches:
+                guessed_category = df[df["Question"] == top_matches[0]].iloc[0]["Category"]
+                response_text = f"I couldn't find an exact match, but your question seems related to <b>{guessed_category}</b>.<br><br>"
+                response_text += "Here are some similar questions:<br>"
+                for i, q in enumerate(top_matches, start=1):
+                    response_text += f"{i}. {q}<br>"
+                response_text += "<br>Select one below to see its answer."
+                st.session_state.chat_history.append({"role": "assistant", "content": response_text})
+                st.session_state.suggested_list = top_matches
+            else:
+                st.session_state.chat_history.append({"role": "assistant", "content": "I couldn't find a close match. Please try rephrasing."})
+
+    st.rerun()
+
+# ---------- Show Buttons for Top Suggestions ----------
 if st.session_state.suggested_list:
-    st.markdown("<div style='margin-top:8px;'><b>Choose a question:</b></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:15px;'><b>Choose a question:</b></div>", unsafe_allow_html=True)
     for i, q in enumerate(st.session_state.suggested_list):
         if st.button(q, key=f"choice_{i}"):
-            row = DF[DF["Question"] == q].iloc[0]
-            html = f"<b>Answer:</b> {row['Answer']}<br><i>(Category: {row['Category']})</i>"
-            st.session_state.chat_history.append({"role":"user","content":q})
-            st.session_state.chat_history.append({"role":"assistant","content":html,"cites":[]})
-    # clear list only after rendering buttons (so they persist if not clicked)
+            row = df[df["Question"] == q].iloc[0]
+            ans = row["Answer"]
+            st.session_state.chat_history.append({"role": "assistant", "content": f"<b>Answer:</b> {ans}"})
+            st.session_state.suggested_list = []
+            st.session_state.clear_input = True
+            st.rerun()
 
+# ---------- Download Chat History ----------
+if st.session_state.chat_history:
+    chat_text = ""
+    for msg in st.session_state.chat_history:
+        role = "You" if msg["role"] == "user" else "Assistant"
+        chat_text += f"{role}: {msg['content']}\n\n"
+    b64 = base64.b64encode(chat_text.encode()).decode()
+    href = f'<a href="data:file/txt;base64,{b64}" download="chat_history.txt">📥 Download Chat History</a>'
+    st.markdown(href, unsafe_allow_html=True)
