@@ -213,3 +213,6 @@ if st.session_state.chat_history:
     b64 = base64.b64encode(chat_text.encode()).decode()
     href = f'<a href="data:file/txt;base64,{b64}" download="chat_history.txt">📥 Download Chat History</a>'
     st.markdown(href, unsafe_allow_html=True)
+
+st.caption("🧑‍🎓This calculator is intended for academic and clinical training purposes. Always confirm calculations with your supervising pharmacist or instructor.📚")
+
