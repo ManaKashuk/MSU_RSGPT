@@ -79,7 +79,7 @@ if st.session_state.last_category != category:
     st.session_state.chat_history = []
     st.session_state.suggested_list = []
     st.session_state.last_category = category
-    st.experimental_rerun()
+    st.rerun()
 
 selected_df = df if (df.empty or category == "All Categories") else df[df["Category"] == category]
 
