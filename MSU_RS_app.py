@@ -51,8 +51,8 @@ st.markdown(
     <div style='text-align:left;'>
         <img src='data:image/png;base64,{logo_base64}' width='150'/>
         <h2>MSU Research Security Assistant</h2>
-        <h5><i>Smart Assistant for Pre- & Post-Award Support at Morgan State University</i></h5>
-        <p>🛡️ Trained on MSU Research Security topics and federal guidance (demo).</p>
+        <h5><i>Smart Assistant for Research Integrity, Compliance & Security Support at Morgan State University</i></h5>
+        <p>🛡️ Trained on MSU Research Security topics and federal guidance.</p>
     </div>
     """,
     unsafe_allow_html=True
